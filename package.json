@@ -1,0 +1,25 @@
+{
+  "name": "evenly-chunk-format",
+  "version": "0.0.1",
+  "description": "protobuf format and related routines for Evenly",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/infwonder/evenly-chunk-format.git"
+  },
+  "keywords": [
+    "Evenly"
+  ],
+  "author": "Jason Lin",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/infwonder/evenly-chunk-format/issues"
+  },
+  "dependencies": {
+    "lupus": "0.0.1",
+    "protocol-buffers": "^3.1.8"
+  }
+}

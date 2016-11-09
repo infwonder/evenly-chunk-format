@@ -1,0 +1,20 @@
+message handshake {
+  required int64 ver = 1;
+  optional string cfid = 2;
+}
+
+message haasmesg {
+  message chunks {
+    required int64  part = 1;
+    required string hash = 2;
+    required int64  size = 3;
+    optional bytes  data = 4; 
+  }
+  required string  type = 1; 
+  required string  name = 2;
+  required int64   size = 3;
+  optional string  hash = 4;
+  optional int64  count = 5;
+  optional int64  csize = 6;
+  repeated chunks piece = 7;
+}
