@@ -28,6 +28,7 @@ module.exports =
   dumpdir: './pbdump',
   outdir: './outdir',
   schemas: undefined,
+  cfgobj: undefined,
 
   load_schemas: function() 
   {
@@ -48,6 +49,21 @@ module.exports =
       var obj = schemas.haasmesg.decode(buf);
       console.log(obj); // dump to screen
     });
+  },
+
+  where_to: function(chash) // still need to add cfgid checking against cfgobj
+  {
+    if (chash === undefined) throw "Need to provide chunk hash";
+    if (module.exports.cfgobj === undefined) throw "Need to obtain evenly-configs object";
+
+    var cfgobj = module.exports.cfgobj;
+
+    if (cfgobj.configs === undefined) cfgobj.load_config();
+
+    var hid = cfgobj.hashs[chash.substr(0,cfgobj.configs.ringsize)];
+    var target = (cfgobj.hostlist.filter((h) => { return cfgobj.nodeparts[h].indexOf(hid) !== -1 }))[0];
+
+    return {[chash]: target};
   },
 
   chunk_file: function(path, chunk_size) 
