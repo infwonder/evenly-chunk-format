@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "lupus": "0.0.1",
+    "mkdirp": "^0.5.1",
     "protocol-buffers": "^3.1.8"
   }
 }

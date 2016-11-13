@@ -21,17 +21,25 @@ const fs = require('fs');
 const protobuf = require('protocol-buffers');
 const C = require('crypto');
 const lupus = require('lupus');
+const mkdirp = require('mkdirp');
 
 module.exports = 
 {
   protofile: __dirname + '/HaaS.proto',
-  dumpdir: './pbdump',
-  outdir: './outdir',
+  dumpdir: undefined,
+  outdir: undefined,
   schemas: undefined,
   cfgobj: undefined,
 
   load_schemas: function() 
   {
+    // still need to add cfgid checking against cfgobj
+    if (module.exports.cfgobj === undefined || module.exports.cfgobj.isa !== 'evenly-configs') throw "Need to obtain evenly-configs object";
+    if (module.exports.cfgobj.configs === undefined) module.exports.cfgobj.load_config();
+
+    module.exports.dumpdir = module.exports.cfgobj.configs.chunkdir;
+    module.exports.outdir = module.exports.cfgobj.configs.outdir;
+
     var path = module.exports.protofile;
     module.exports.schemas = protobuf(fs.readFileSync(path));
   },
@@ -54,7 +62,7 @@ module.exports =
   where_to: function(chash) // still need to add cfgid checking against cfgobj
   {
     if (chash === undefined) throw "Need to provide chunk hash";
-    if (module.exports.cfgobj === undefined) throw "Need to obtain evenly-configs object";
+    if (module.exports.cfgobj === undefined || module.exports.cfgobj.isa !== 'evenly-configs') throw "Need to obtain evenly-configs object";
 
     var cfgobj = module.exports.cfgobj;
 
@@ -64,6 +72,23 @@ module.exports =
     var target = (cfgobj.hostlist.filter((h) => { return cfgobj.nodeparts[h].indexOf(hid) !== -1 }))[0];
 
     return {[chash]: target};
+  },
+
+  bucket_path: function(chash) // still need to add cfgid checking against cfgobj
+  {
+    if (chash === undefined) throw "Need to provide chunk hash";
+    if (module.exports.cfgobj === undefined || module.exports.cfgobj.isa !== 'evenly-configs') throw "Need to obtain evenly-configs object";
+
+    var cfgobj = module.exports.cfgobj;
+
+    if (cfgobj.configs === undefined) cfgobj.load_config();
+
+    var hid = cfgobj.hashs[chash.substr(0,cfgobj.configs.ringsize)];
+
+    mkdirp.sync(cfgobj.chunkdir + '/' + hid, (err) => { if (err) throw err; });
+
+    var cpath = cfgobj.chunkdir + '/' + hid + '/' + chash;
+    return {[chash]: cpath}; 
   },
 
   chunk_file: function(path, chunk_size) 
