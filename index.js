@@ -37,8 +37,8 @@ module.exports =
     if (module.exports.cfgobj === undefined || module.exports.cfgobj.isa !== 'evenly-configs') throw "Need to obtain evenly-configs object";
     if (module.exports.cfgobj.configs === undefined) module.exports.cfgobj.load_config();
 
-    module.exports.dumpdir = module.exports.cfgobj.configs.chunkdir;
-    module.exports.outdir = module.exports.cfgobj.configs.outdir;
+    module.exports.dumpdir = module.exports.cfgobj.chunkdir;
+    module.exports.outdir = module.exports.cfgobj.outdir;
 
     var path = module.exports.protofile;
     module.exports.schemas = protobuf(fs.readFileSync(path));
@@ -59,36 +59,29 @@ module.exports =
     });
   },
 
-  where_to: function(chash) // still need to add cfgid checking against cfgobj
+  where_to: function(cpath) // still need to add cfgid checking against cfgobj
   {
-    if (chash === undefined) throw "Need to provide chunk hash";
+    if (cpath === undefined) throw "Need to provide chunk hash";
     if (module.exports.cfgobj === undefined || module.exports.cfgobj.isa !== 'evenly-configs') throw "Need to obtain evenly-configs object";
 
     var cfgobj = module.exports.cfgobj;
-
-    if (cfgobj.configs === undefined) cfgobj.load_config();
-
-    var hid = cfgobj.hashs[chash.substr(0,cfgobj.configs.ringsize)];
+    var [cfgid, hid, chash] = cpath.split('-');
+    if (cfgobj.cfgid !== cfgid) throw "mismaching config id... abort";
     var target = (cfgobj.hostlist.filter((h) => { return cfgobj.nodeparts[h].indexOf(hid) !== -1 }))[0];
 
-    return {[chash]: target};
+    return {[cpath]: target};
   },
 
   bucket_path: function(chash) // still need to add cfgid checking against cfgobj
   {
     if (chash === undefined) throw "Need to provide chunk hash";
-    if (module.exports.cfgobj === undefined || module.exports.cfgobj.isa !== 'evenly-configs') throw "Need to obtain evenly-configs object";
+    if (module.exports.cfgobj.isa !== 'evenly-configs') throw "Need to obtain evenly-configs object";
+    if (module.exports.cfgobj.configs === undefined) module.exports.cfgobj.load_config();
 
     var cfgobj = module.exports.cfgobj;
-
-    if (cfgobj.configs === undefined) cfgobj.load_config();
-
     var hid = cfgobj.hashs[chash.substr(0,cfgobj.configs.ringsize)];
-
-    mkdirp.sync(cfgobj.chunkdir + '/' + hid, (err) => { if (err) throw err; });
-
-    var cpath = cfgobj.chunkdir + '/' + hid + '/' + chash;
-    return {[chash]: cpath}; 
+    var cpath = cfgobj.cfgid + '-' + hid + '-' + chash;
+    return cpath; 
   },
 
   chunk_file: function(path, chunk_size) 
@@ -97,6 +90,10 @@ module.exports =
       console.log("schemas not found, loading " + module.exports.protofile + "...");
       module.exports.load_schemas(module.exports.protofile); 
     };
+
+    if (module.exports.cfgobj.isa !== 'evenly-configs') throw "Need to obtain evenly-configs object";
+    if (module.exports.cfgobj.configs === undefined) module.exports.cfgobj.load_config();
+    var cfgobj = module.exports.cfgobj;
 
     chunk_size = chunk_size || 512; // default
 
@@ -164,7 +161,13 @@ module.exports =
               meta.piece.push({ part: count, size: nread, hash: chunksum });
         
               fs.writeFile(module.exports.dumpdir + '/' + chunksum, pbuf, (err) => { if (err) throw err });
-              console.log("Chunk sum: " + chunksum);
+
+              var hid = cfgobj.hashs[chunksum.substr(0,cfgobj.configs.ringsize)];
+              var cpath = cfgobj.cfgid + '-' + hid + '-' + chunksum;
+
+              console.log("Chunk sum: " + cpath);
+              console.log(module.exports.where_to(cpath));
+
               count = count + 1;
               readchunk(count, meta);
             });
