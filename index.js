@@ -27,6 +27,7 @@ module.exports =
 {
   protofile: __dirname + '/HaaS.proto',
   dumpdir: undefined,
+  metadir: undefined,
   outdir: undefined,
   schemas: undefined,
   cfgobj: undefined,
@@ -38,6 +39,7 @@ module.exports =
     if (module.exports.cfgobj.configs === undefined) module.exports.cfgobj.load_config();
 
     module.exports.dumpdir = module.exports.cfgobj.chunkdir;
+    module.exports.metadir = module.exports.cfgobj.metadir;
     module.exports.outdir = module.exports.cfgobj.outdir;
 
     var path = module.exports.protofile;
@@ -133,7 +135,7 @@ module.exports =
                 // Finalize and store meta
                 meta.count = count-1;
                 var pbuf = module.exports.schemas.haasmesg.encode(meta);
-                fs.writeFile(module.exports.dumpdir + '/' + filemd5 + ".meta", pbuf, (err) => { if (err) throw err } );
+                fs.writeFile(module.exports.metadir + '/' + filemd5 + ".meta", pbuf, (err) => { if (err) throw err } );
                 console.log("meta data " + filemd5 + ".meta written.");
         
                 return;
@@ -159,14 +161,17 @@ module.exports =
               });
         
               meta.piece.push({ part: count, size: nread, hash: chunksum });
-        
-              fs.writeFile(module.exports.dumpdir + '/' + chunksum, pbuf, (err) => { if (err) throw err });
-
+       
               var hid = cfgobj.hashs[chunksum.substr(0,cfgobj.configs.ringsize)];
+
+              mkdirp(module.exports.dumpdir + '/' + filemd5, (err) => {
+                if (err) throw err;
+                fs.writeFile(module.exports.dumpdir + '/' + filemd5 + '/' + chunksum, pbuf, (err) => { if (err) throw err });
+              });
+
               var cpath = cfgobj.cfgid + '-' + hid + '-' + chunksum;
 
-              console.log("Chunk sum: " + cpath);
-              console.log(module.exports.where_to(cpath));
+              console.log("Chunk: ", module.exports.where_to(cpath));
 
               count = count + 1;
               readchunk(count, meta);
@@ -190,7 +195,7 @@ module.exports =
       module.exports.load_schemas(module.exports.protofile); 
     };
    
-    fs.readFile(module.exports.dumpdir + '/' + metapath, (err, meta) => {
+    fs.readFile(module.exports.metadir + '/' + metapath, (err, meta) => {
       if (err) throw err;
     
       var mobj  = module.exports.schemas.haasmesg.decode(meta);
@@ -213,7 +218,7 @@ module.exports =
           var offset = i * mobj.csize;
           var csize = obj.size;
     
-          fs.readFile(module.exports.dumpdir + '/' + chash, (err, cbuf) => {
+          fs.readFile(module.exports.dumpdir + '/' + name + '/' + chash, (err, cbuf) => {
             if (err) throw err;
 
             var data = module.exports.schemas.haasmesg.decode(cbuf);
