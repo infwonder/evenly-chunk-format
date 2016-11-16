@@ -26,7 +26,7 @@ const mkdirp = require('mkdirp');
 module.exports = 
 {
   protofile: __dirname + '/HaaS.proto',
-  dumpdir: undefined,
+  chunkdir: undefined,
   metadir: undefined,
   outdir: undefined,
   schemas: undefined,
@@ -38,7 +38,7 @@ module.exports =
     if (module.exports.cfgobj === undefined || module.exports.cfgobj.isa !== 'evenly-configs') throw "Need to obtain evenly-configs object";
     if (module.exports.cfgobj.configs === undefined) module.exports.cfgobj.load_config();
 
-    module.exports.dumpdir = module.exports.cfgobj.chunkdir;
+    module.exports.chunkdir = module.exports.cfgobj.chunkdir;
     module.exports.metadir = module.exports.cfgobj.metadir;
     module.exports.outdir = module.exports.cfgobj.outdir;
 
@@ -53,12 +53,21 @@ module.exports =
       module.exports.load_schemas(module.exports.protofile); 
     };
 
-    fs.readFile( dumpdir + '/' + path, (err, buf) => {
+    fs.readFile(path, (err, buf) => {
       if (err) throw err;
 
-      var obj = schemas.haasmesg.decode(buf);
+      var obj = module.exports.schemas.haasmesg.decode(buf);
       console.log(obj); // dump to screen
     });
+  },
+
+  dumpdata_screen: function(pbuf) {
+    if (module.exports.schemas === undefined) {
+      console.log("schemas not found, loading " + module.exports.protofile + "...");
+      module.exports.load_schemas(module.exports.protofile); 
+    };
+
+    console.log(module.exports.schemas.haasmesg.decode(pbuf));
   },
 
   where_to: function(cpath) // still need to add cfgid checking against cfgobj
@@ -86,8 +95,10 @@ module.exports =
     return cpath; 
   },
 
-  chunk_file: function(path, chunk_size) 
+  chunk_file: function(path, chunk_size, store) 
   {
+    store = (store == 'true'); // http://heyjavascript.com/javascript-string-to-boolean/
+
     if (module.exports.schemas === undefined) {
       console.log("schemas not found, loading " + module.exports.protofile + "...");
       module.exports.load_schemas(module.exports.protofile); 
@@ -151,23 +162,33 @@ module.exports =
               }
         
               var chunksum = C.createHash('md5').update(data).digest('hex');
-        
-              var pbuf = module.exports.schemas.haasmesg.encode({
-                type: 'file',
-                name: path,
-                hash: filemd5,
-                size: stats.size,
-               piece: [ {part: count, size: nread, hash: chunksum, data: data} ]
-              });
-        
-              meta.piece.push({ part: count, size: nread, hash: chunksum });
-       
               var hid = cfgobj.hashs[chunksum.substr(0,cfgobj.configs.ringsize)];
 
-              mkdirp(module.exports.dumpdir + '/' + filemd5, (err) => {
-                if (err) throw err;
-                fs.writeFile(module.exports.dumpdir + '/' + filemd5 + '/' + chunksum, pbuf, (err) => { if (err) throw err });
-              });
+              meta.piece.push({ part: count, size: nread, hash: chunksum });
+        
+              if (store === false) { // this is for directly sending result to network. Thus all header are attached and ready to send
+                var pbuf = module.exports.schemas.haasmesg.encode({
+                  type: 'file',
+                  name: path,
+                  hash: filemd5,
+                  size: stats.size,
+                 piece: [ {part: count, size: nread, hash: chunksum, data: data} ]
+                });
+
+                fs.writeFile(module.exports.chunkdir + '/' + filemd5 + '-' + chunksum, pbuf, (err) => { if (err) throw err });
+              } else { // this is for actual storage that allows proper data deduplication 
+                fs.writeFile(module.exports.chunkdir + '/data/' + chunksum, data, (err) => { if (err) throw err });
+
+                var pbJSON = {
+                  type: 'file',
+                  name: path,
+                  hash: filemd5,
+                  size: stats.size,
+                 piece: [ {part: count, size: nread, hash: chunksum} ] 
+                };
+
+                fs.writeFile(module.exports.chunkdir + '/head/' + filemd5 + '-' + chunksum, JSON.stringify(pbJSON), (err) => { if (err) throw err });
+              }
 
               var cpath = cfgobj.cfgid + '-' + hid + '-' + chunksum;
 
@@ -188,7 +209,27 @@ module.exports =
     });
   },
 
-  join_chunks: function(metapath)
+  mobilize_chunk: function(fhash, chash, callback) {
+    if (fhash === undefined || chash === undefined) throw "Need to specify both file hash and chunk hash... ";
+
+    if (module.exports.schemas === undefined) {
+      console.log("schemas not found, loading " + module.exports.protofile + "...");
+      module.exports.load_schemas(module.exports.protofile); 
+    };
+
+    fs.readFile(module.exports.chunkdir + '/data/' + chash, (err, data) => {
+      if (err) throw err;
+
+      var pbJSON = JSON.parse(fs.readFileSync(module.exports.chunkdir + '/head/' + fhash + '-' + chash));
+
+      pbJSON.piece[0].data = data;
+      var pbuf = module.exports.schemas.haasmesg.encode(pbJSON);
+      
+      return callback(pbuf);
+    });
+  },
+
+  join_chunks: function(metapath) // join from just downloaded chunks with headers... this should be more commonly used.
   {
     if (module.exports.schemas === undefined) {
       console.log("schemas not found, loading " + module.exports.protofile + "...");
@@ -218,7 +259,7 @@ module.exports =
           var offset = i * mobj.csize;
           var csize = obj.size;
     
-          fs.readFile(module.exports.dumpdir + '/' + name + '/' + chash, (err, cbuf) => {
+          fs.readFile(module.exports.chunkdir + '/' + name + '/' + chash, (err, cbuf) => {
             if (err) throw err;
 
             var data = module.exports.schemas.haasmesg.decode(cbuf);
