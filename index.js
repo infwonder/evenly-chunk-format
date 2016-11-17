@@ -46,7 +46,7 @@ module.exports =
     module.exports.schemas = protobuf(fs.readFileSync(path));
   },
 
-  dump_screen: function(path) 
+  inspect_pbuf_file: function(path) // utility function for debugging
   {
     if (module.exports.schemas === undefined) {
       console.log("schemas not found, loading " + module.exports.protofile + "...");
@@ -61,13 +61,28 @@ module.exports =
     });
   },
 
-  dumpdata_screen: function(pbuf) {
+  dump_pbuf_on_screen: function(fhash, chash, pbuf) // utility function for debugging
+  {
     if (module.exports.schemas === undefined) {
       console.log("schemas not found, loading " + module.exports.protofile + "...");
       module.exports.load_schemas(module.exports.protofile); 
     };
 
     console.log(module.exports.schemas.haasmesg.decode(pbuf));
+  },
+
+  dump_pbuf_as_chunk: function(fhash, chash, pbuf) 
+  {
+    if (module.exports.schemas === undefined) {
+      console.log("schemas not found, loading " + module.exports.protofile + "...");
+      module.exports.load_schemas(module.exports.protofile); 
+    };
+
+    mkdirp(module.exports.chunkdir + '/' + fhash, (err) => {
+      if (err) throw err;
+      var path = module.exports.chunkdir + '/' + fhash + '/' + chash;
+      fs.writeFile(path, pbuf, (err) => {if (err) throw err});
+    });
   },
 
   where_to: function(cpath) // still need to add cfgid checking against cfgobj
@@ -225,7 +240,7 @@ module.exports =
       pbJSON.piece[0].data = data;
       var pbuf = module.exports.schemas.haasmesg.encode(pbJSON);
       
-      return callback(pbuf);
+      return callback(fhash, chash, pbuf);
     });
   },
 
